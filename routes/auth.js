@@ -2,10 +2,22 @@ var express = require('express');
 var router = express.Router();
 var request = require('request');
 var knex = require('../db/knex')
+var cookieParser = require('cookie-parser');
+var moment = require('moment')
+var jwt = require('jwt-simple')
 require('dotenv').load()
 
 function Users() {
   return knex('users')
+}
+
+function createJWT(user) {
+  var payload = {
+    sub: user.fb_id,
+    iat: moment().unix(),
+    exp: moment().add(14, 'days').unix()
+  };
+  return jwt.encode(payload, process.env.TOKEN_SECRET);
 }
 
 
@@ -34,22 +46,21 @@ router.post('/facebook', function(req,res){
           user.email = profile.email
           user.firstName = profile.first_name
           user.lastName = profile.last_name
-          res.cookie('userid', profile.id)
+          var token = createJWT(user);
 
-
-          //set cookie with profile.id
           Users().select().where({fb_id: profile.id}).then(function(result){
             if(!result.length) {
               Users().insert(user).returning('*').then(function(rest){
                 var results = rest
                 results.token = process.env.FACEBOOK_SECRET
-                res.json(results)
+                res.send({ token: token });
+
               })
             }
             else {
               loggedIn = result
               loggedIn.token = process.env.FACEBOOK_SECRET
-              res.json(loggedIn)
+              res.send({ token: token });
             }
           })
       })
